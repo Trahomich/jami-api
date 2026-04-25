@@ -1,0 +1,21 @@
+services:
+  jami-api:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - jami-data:/root/.local/share/jami
+    environment:
+      - JAMI_API_HOST=0.0.0.0
+      - JAMI_API_PORT=8080
+      - JAMI_API_LOG_LEVEL=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  jami-data:

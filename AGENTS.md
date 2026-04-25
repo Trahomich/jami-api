@@ -37,20 +37,25 @@ pytest tests/test_messages.py -v
 ```
 Docker Container
 ├── dbus-daemon (session bus)
-├── jami-daemon (/usr/libexec/jamid) — exposes cx.ring.Ring.ConfigurationManager on D-Bus
-└── FastAPI (:8080) — uses dasbus + gi (PyGObject) for D-Bus IPC
+├── jami-daemon (/usr/libexec/jamid) — exposes cx.ring.Ring.ConfigurationManager + CallManager on D-Bus
+└── FastAPI (:8080)
+    ├── /api/*         REST endpoints
+    ├── /ws/*          WebSocket events
+    └── /mcp           MCP server (Streamable HTTP transport)
 ```
 
 Key flow: Router → JamiDBusClient (singleton) → D-Bus proxy → jami-daemon.
 Events flow in reverse: D-Bus signal → Gio subscription → EventBus → WebSocket.
+MCP tools call JamiDBusClient directly, same as REST routers.
 
 ## Project Structure
 
 ```
 app/
-├── main.py              # FastAPI app, startup/shutdown lifecycle, /health
+├── main.py              # FastAPI app, startup/shutdown lifecycle, /health, mounts MCP
 ├── config.py            # pydantic-settings (env prefix: JAMI_API_)
 ├── dbus_client.py       # Singleton D-Bus client, all daemon methods, signal handling
+├── mcp_server.py        # MCP server (FastMCP, Streamable HTTP), 15 tools + 3 resources
 ├── routers/             # FastAPI routers (one per domain)
 │   ├── accounts.py      # CRUD /accounts
 │   ├── contacts.py      # /accounts/{id}/contacts
@@ -71,7 +76,8 @@ tests/
 ├── test_messages.py     # Tests via JamiDBusClient directly
 ├── test_calls.py
 ├── test_files.py
-└── test_event_bus.py
+├── test_event_bus.py
+└── test_api_integration.py  # HTTP tests against running service
 ```
 
 ## Code Style

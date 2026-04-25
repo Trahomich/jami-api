@@ -1,6 +1,6 @@
 # Jami Docker Client + REST API
 
-REST API для управления Jami-демоном в Docker-контейнере через D-Bus.
+REST API для управления Jami-демоном в Docker-контейнере через D-Bus. Включает MCP сервер для AI-агентов.
 
 ## Запуск
 
@@ -98,8 +98,54 @@ curl -X POST http://localhost:8080/api/accounts/{account_id}/files/download \
 
 ```bash
 curl http://localhost:8080/api/accounts/{account_id}/files/{conversation_id}/{interaction_id}/status
-# → {"status":"completed","totalSize":1024}
+# → {"error_code":0,"path":"/tmp/file","total_size":1024,"bytes_progress":1024}
 ```
+
+## MCP Server
+
+API включает MCP сервер (Streamable HTTP transport) на `POST /mcp` для интеграции с AI-агентами (Claude, Cursor, и т.д.).
+
+### Конфигурация клиента
+
+Добавьте в MCP клиент (например, Claude Desktop, Cursor):
+
+```json
+{
+  "mcpServers": {
+    "jami": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+### Доступные инструменты (15)
+
+| Tool | Описание |
+|------|----------|
+| `list_accounts` | Список аккаунтов Jami |
+| `get_account_info` | Детали аккаунта |
+| `get_account_status` | Runtime-статус (registration, DHT) |
+| `list_contacts` | Список контактов |
+| `add_contact` | Добавить контакт |
+| `remove_contact` | Удалить контакт |
+| `list_conversations` | Список swarm-разговоров |
+| `send_message` | Отправить сообщение в swarm |
+| `send_direct_message` | Отправить прямое сообщение |
+| `place_call` | Позвонить |
+| `hangup_call` | Завершить звонок |
+| `accept_call` | Принять звонок |
+| `list_calls` | Список активных звонков |
+| `send_file` | Отправить файл |
+| `get_file_status` | Статус передачи файла |
+
+### Доступные ресурсы (3)
+
+| URI | Описание |
+|-----|----------|
+| `jami://accounts` | Все аккаунты с деталями |
+| `jami://accounts/{id}/contacts` | Контакты аккаунта |
+| `jami://accounts/{id}/conversations` | Разговоры аккаунта |
 
 ## API Reference
 
@@ -113,14 +159,18 @@ curl http://localhost:8080/api/accounts/{account_id}/files/{conversation_id}/{in
 | GET | `/api/accounts/{id}/contacts` | Список контактов |
 | POST | `/api/accounts/{id}/contacts` | Добавить контакт |
 | DELETE | `/api/accounts/{id}/contacts/{uri}` | Удалить контакт |
+| GET | `/api/accounts/{id}/contacts/{uri}` | Детали контакта |
 | POST | `/api/accounts/{id}/messages` | Отправить direct-сообщение |
 | POST | `/api/accounts/{id}/conversations/{conv_id}/messages` | Отправить в swarm |
 | GET | `/api/accounts/{id}/conversations` | Список разговоров |
+| GET | `/api/accounts/{id}/conversations/{conv_id}/messages` | Загрузить историю |
 | POST | `/api/accounts/{id}/files/send` | Отправить файл |
 | POST | `/api/accounts/{id}/files/download` | Скачать файл |
 | GET | `/api/accounts/{id}/files/{conv_id}/{file_id}/status` | Статус файла |
 | POST | `/api/accounts/{id}/calls` | Позвонить |
 | POST | `/api/accounts/{id}/calls/{call_id}/accept` | Принять звонок |
 | POST | `/api/accounts/{id}/calls/{call_id}/hangup` | Завершить звонок |
+| GET | `/api/accounts/{id}/calls` | Активные звонки |
 | WS | `/api/ws/accounts/{id}/events` | Real-time события |
+| POST | `/mcp` | MCP сервер (Streamable HTTP) |
 | GET | `/health` | Healthcheck |

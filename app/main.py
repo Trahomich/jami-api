@@ -1,3 +1,5 @@
+import contextlib
+
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,10 +16,26 @@ logger = structlog.get_logger()
 event_bus = EventBus()
 dbus_client = JamiDBusClient.get_instance()
 
+from app.mcp_server import mcp, mcp_app  # noqa: E402
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("starting_jami_api", host=settings.host, port=settings.port)
+    dbus_client.connect(event_bus=event_bus)
+    messages_mod.set_event_bus(event_bus)
+    async with mcp.session_manager.run():
+        logger.info("jami_api_ready")
+        yield
+    logger.info("shutting_down")
+    dbus_client.disconnect()
+
+
 app = FastAPI(
     title="Jami API",
     description="REST API for Jami messaging daemon",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -35,23 +53,12 @@ app.include_router(calls.router, prefix="/api", tags=["calls"])
 app.include_router(files.router, prefix="/api", tags=["files"])
 
 
-@app.on_event("startup")
-async def startup() -> None:
-    logger.info("starting_jami_api", host=settings.host, port=settings.port)
-    dbus_client.connect(event_bus=event_bus)
-    messages_mod.set_event_bus(event_bus)
-    logger.info("jami_api_ready")
-
-
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    logger.info("shutting_down")
-    dbus_client.disconnect()
-
-
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {
         "status": "ok" if dbus_client.is_connected else "degraded",
         "dbus": "connected" if dbus_client.is_connected else "disconnected",
     }
+
+
+app.mount("/", mcp_app)

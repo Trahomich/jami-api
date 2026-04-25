@@ -12,6 +12,10 @@ sys.modules["dasbus.connection"] = MagicMock()
 sys.modules["dasbus.loop"] = MagicMock()
 sys.modules["structlog"] = MagicMock()
 sys.modules["pydantic_settings"] = MagicMock()
+sys.modules["mcp"] = MagicMock()
+sys.modules["mcp.server"] = MagicMock()
+sys.modules["mcp.server.fastmcp"] = MagicMock()
+sys.modules["mcp.server.transport_security"] = MagicMock()
 
 
 @pytest.fixture

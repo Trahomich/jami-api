@@ -16,10 +16,13 @@ async def test_get_conversations(mock_dbus_client):
 
 
 @pytest.mark.asyncio
-async def test_get_conversation_messages(mock_dbus_client):
-    mock_dbus_client.proxy.getConversationMessages.return_value = [
-        {"id": "msg1", "body": "Hi"},
-    ]
-    messages = mock_dbus_client.get_conversation_messages("acc1", "conv1", 50)
-    assert len(messages) == 1
-    assert messages[0]["body"] == "Hi"
+async def test_send_conversation_message(mock_dbus_client):
+    mock_dbus_client.send_conversation_message("acc1", "conv1", "Hello")
+    mock_dbus_client.proxy.sendMessage.assert_called_once_with("acc1", "conv1", "Hello", "", 0)
+
+
+@pytest.mark.asyncio
+async def test_load_conversation(mock_dbus_client):
+    mock_dbus_client.proxy.loadConversation.return_value = 1
+    result = mock_dbus_client.load_conversation("acc1", "conv1", "", 50)
+    assert result == 1

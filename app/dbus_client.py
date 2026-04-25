@@ -1,5 +1,5 @@
 import threading
-from typing import Any, Callable
+from typing import Any
 
 import gi
 
@@ -24,6 +24,7 @@ class JamiDBusClient:
         self._bus = SessionMessageBus()
         self._event_loop = EventLoop()
         self._proxy: Any = None
+        self._call_proxy: Any = None
         self._connected = False
         self._event_thread: threading.Thread | None = None
         self._gio_bus: Any = None
@@ -43,6 +44,10 @@ class JamiDBusClient:
             self._proxy = self._bus.get_proxy(
                 "cx.ring.Ring",
                 "/cx/ring/Ring/ConfigurationManager",
+            )
+            self._call_proxy = self._bus.get_proxy(
+                "cx.ring.Ring",
+                "/cx/ring/Ring/CallManager",
             )
             self._gio_bus = Gio.bus_get_sync(Gio.BusType.SESSION)
             self._connected = True
@@ -64,6 +69,15 @@ class JamiDBusClient:
             "cx.ring.Ring.ConfigurationManager",
             None,
             "/cx/ring/Ring/ConfigurationManager",
+            None,
+            Gio.DBusSignalFlags.NONE,
+            self._on_dbus_signal,
+        )
+        self._gio_bus.signal_subscribe(
+            "cx.ring.Ring",
+            "cx.ring.Ring.CallManager",
+            None,
+            "/cx/ring/Ring/CallManager",
             None,
             Gio.DBusSignalFlags.NONE,
             self._on_dbus_signal,
@@ -231,7 +245,7 @@ class JamiDBusClient:
         return dict(self.proxy.getContactDetails(account_id, uri))
 
     def send_text_message(self, account_id: str, to: str, payloads: dict[str, str]) -> str:
-        return self.proxy.sendTextMessage(account_id, to, payloads, 0)
+        return str(self.proxy.sendTextMessage(account_id, to, payloads, 0))
 
     def send_conversation_message(
         self, account_id: str, conv_id: str, body: str, parent: str = ""
@@ -249,31 +263,43 @@ class JamiDBusClient:
     def get_conversation_messages(
         self, account_id: str, conv_id: str, count: int, from_msg: str = "", search: str = ""
     ) -> list[dict[str, Any]]:
-        messages = self.proxy.getConversationMessages(account_id, conv_id, count, from_msg, search)
-        return [dict(m) for m in messages]
+        self.load_conversation(account_id, conv_id, from_msg, count)
+        return []
 
     def place_call(self, account_id: str, to: str) -> str:
-        return self.proxy.placeCall(account_id, to)
+        return self._call_proxy.placeCall(account_id, to)
 
     def accept_call(self, account_id: str, call_id: str) -> None:
-        self.proxy.accept(account_id, call_id)
+        self._call_proxy.accept(account_id, call_id)
 
     def hang_up(self, account_id: str, call_id: str) -> None:
-        self.proxy.hangUp(account_id, call_id)
+        self._call_proxy.hangUp(account_id, call_id)
 
-    def get_call_list(self, account_id: str) -> list[dict[str, Any]]:
-        calls = self.proxy.getCallList(account_id)
-        return [dict(c) for c in calls]
+    def get_call_list(self, account_id: str) -> list[str]:
+        return self._call_proxy.getCallList(account_id)
+
+    def get_call_details(self, account_id: str, call_id: str) -> dict[str, str]:
+        return dict(self._call_proxy.getCallDetails(account_id, call_id))
 
     def send_file(self, account_id: str, conversation_id: str, file_path: str) -> str:
-        return self.proxy.sendFile(account_id, conversation_id, file_path, "")
+        return self.proxy.sendFile(account_id, conversation_id, file_path, "", "")
 
     def download_file(
         self, account_id: str, conversation_id: str, interaction_id: str, file_path: str
     ) -> None:
-        self.proxy.downloadFile(account_id, conversation_id, interaction_id, file_path)
+        self.proxy.downloadFile(
+            account_id, conversation_id, interaction_id, interaction_id, file_path
+        )
 
     def file_transfer_info(
         self, account_id: str, conversation_id: str, interaction_id: str
     ) -> dict[str, Any]:
-        return dict(self.proxy.fileTransferInfo(account_id, conversation_id, interaction_id))
+        error_code, path, total_size, bytes_progress = self.proxy.fileTransferInfo(
+            account_id, conversation_id, interaction_id
+        )
+        return {
+            "error_code": error_code,
+            "path": path,
+            "total_size": total_size,
+            "bytes_progress": bytes_progress,
+        }

@@ -3,11 +3,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
+sys.modules["gi"] = MagicMock()
+sys.modules["gi.repository"] = MagicMock()
 sys.modules["dasbus"] = MagicMock()
 sys.modules["dasbus.client"] = MagicMock()
 sys.modules["dasbus.client.proxy"] = MagicMock()
 sys.modules["dasbus.connection"] = MagicMock()
 sys.modules["dasbus.loop"] = MagicMock()
+sys.modules["structlog"] = MagicMock()
+sys.modules["pydantic_settings"] = MagicMock()
 
 
 @pytest.fixture
@@ -18,6 +22,7 @@ def mock_dbus_client():
     client._bus = MagicMock()
     client._event_loop = MagicMock()
     client._proxy = MagicMock()
+    client._call_proxy = MagicMock()
     client._connected = True
     client._event_thread = None
     return client

@@ -1,142 +1,163 @@
-# Jami Docker Client + API — План разработки
+# AGENTS.md — Jami API
 
-## Архитектура
+REST API for Jami messaging daemon running in Docker. FastAPI talks to jami-daemon over D-Bus session bus.
 
-```
-┌─────────────────────────────────────────────┐
-│  Docker Container                           │
-│                                             │
-│  ┌──────────────┐  D-Bus  ┌──────────────┐ │
-│  │  REST API    │◄────────►│  jami-daemon  │ │
-│  │  (FastAPI)   │          │  (libjami)    │ │
-│  │  :8080       │          │              │ │
-│  └──────┬───────┘          └──────────────┘ │
-│         │                                   │
-└─────────┼───────────────────────────────────┘
-          │
-     HTTP / JSON
-          │
-    ┌─────▼─────┐
-    │  Клиенты   │
-    └───────────┘
-```
+## Build / Run Commands
 
-## Этапы разработки
+```bash
+# Build and run (full stack: dbus + jami-daemon + API)
+docker-compose build
+docker-compose up
 
-### Этап 1 — Базовая инфраструктура
-- Dockerfile на базе debian:bookworm
-- Сборка/установка jami-daemon (libjami) из официальных пакетов Jami
-- Установка D-Bus session bus
-- Python 3.12 + FastAPI + uvicorn
-- Библиотека dasbus для D-Bus коммуникации
-- docker-compose.yml для запуска контейнера
-- entrypoint.sh — запуск D-Bus + jami-daemon + API-сервер
+# Inside container or with venv activated:
+pip install -e ".[dev]"
 
-### Этап 2 — API: Управление аккаунтами
-- POST /accounts — создать аккаунт Jami
-- GET /accounts — список аккаунтов
-- GET /accounts/{id} — информация об аккаунте
-- DELETE /accounts/{id} — удалить аккаунт
-- POST /accounts/{id}/register — привязать к Jami ID (username)
+# Lint
+ruff check .
+ruff check --fix .        # auto-fix
 
-### Этап 3 — API: Контакты
-- GET /accounts/{id}/contacts — список контактов
-- POST /accounts/{id}/contacts — добавить контакт
-- DELETE /accounts/{id}/contacts/{hash} — удалить контакт
-- GET /accounts/{id}/contacts/{hash} — детали контакта
+# Typecheck (note: gi/dasbus are C bindings, stubs may not exist)
+mypy app/
 
-### Этап 4 — API: Обмен сообщениями
-- POST /accounts/{id}/messages — отправить текстовое сообщение
-- GET /accounts/{id}/conversations — список разговоров (swarm)
-- GET /accounts/{id}/conversations/{convId}/messages — история сообщений
-- WebSocket /ws/accounts/{id}/events — real-time получение сообщений и событий
+# Tests — all
+pytest tests/
 
-### Этап 5 — API: Звонки (аудио/видео)
-- POST /accounts/{id}/calls — инициировать звонок
-- POST /accounts/{id}/calls/{callId}/accept — принять звонок
-- POST /accounts/{id}/calls/{callId}/hangup — завершить звонок
-- GET /accounts/{id}/calls — активные звонки
-- WebSocket-события для входящих звонков
+# Tests — single file
+pytest tests/test_accounts.py
 
-### Этап 6 — API: Файловый обмен
-- POST /accounts/{id}/files/send — отправить файл
-- GET /accounts/{id}/files/{fileId}/download — скачать файл
-- GET /accounts/{id}/files/{fileId}/status — статус передачи
+# Tests — single test function
+pytest tests/test_accounts.py::test_create_account
 
-### Этап 7 — Надёжность и продакшен
-- Конфигурация через env-переменные и config.yaml
-- Healthcheck в Docker (GET /health)
-- Volumes для персистентности данных (~/.local/share/jami/)
-- Логирование (structlog)
-- Аутентификация API (API-key / JWT)
-- Тесты (pytest + mocked D-Bus)
-- CI/CD (GitHub Actions: lint -> test -> build -> push image)
-
-## Стек технологий
-
-| Компонент | Выбор | Обоснование |
-|-----------|-------|-------------|
-| Daemon | jami-daemon (deb-пакет) | Официальный, стабильный |
-| IPC | D-Bus (session bus) | Стандартный интерфейс jami-daemon |
-| API | FastAPI (Python 3.12) | Async, автодокументация, WebSocket |
-| D-Bus binding | dasbus | Современный, Python 3, типизированный |
-| База | Файловая система Jami | Daemon сам хранит данные |
-| Runtime | Docker + docker-compose | Изоляция, воспроизводимость |
-
-## Структура проекта
-
-```
-jami-api/
-├── Dockerfile
-├── docker-compose.yml
-├── entrypoint.sh
-├── pyproject.toml
-├── app/
-│   ├── __init__.py
-│   ├── main.py              # FastAPI app, startup/shutdown
-│   ├── config.py            # Settings from env
-│   ├── dbus_client.py       # D-Bus connection to jami-daemon
-│   ├── routers/
-│   │   ├── accounts.py
-│   │   ├── contacts.py
-│   │   ├── messages.py
-│   │   ├── calls.py
-│   │   └── files.py
-│   ├── schemas/
-│   │   ├── account.py
-│   │   ├── contact.py
-│   │   ├── message.py
-│   │   ├── call.py
-│   │   └── file.py
-│   ├── services/
-│   │   ├── jami_service.py  # Business logic wrapper
-│   │   └── event_bus.py     # WebSocket event dispatching
-│   └── websocket/
-│       └── handler.py       # WS connection manager
-├── tests/
-│   ├── conftest.py
-│   ├── test_accounts.py
-│   ├── test_messages.py
-│   └── ...
-└── .github/
-    └── workflows/
-        └── ci.yml
+# Tests — with verbose output
+pytest tests/test_messages.py -v
 ```
 
-## Ключевые риски и решения
+## Architecture
 
-| Риск | Решение |
-|------|---------|
-| jami-daemon нет в стандартных репо Debian | Использовать официальный Jami APT-репозиторий или собирать из исходников |
-| D-Bus session bus в Docker | Запускать dbus-daemon --session в entrypoint |
-| Нет headed-дисплея для daemon | Jami daemon работает headless, не требует GUI |
-| Нестабильность D-Bus подключения | Reconnect-логика + healthcheck |
-| Concurrent access к D-Bus | Async queue + thread-safe wrapper |
+```
+Docker Container
+├── dbus-daemon (session bus)
+├── jami-daemon (/usr/libexec/jamid) — exposes cx.ring.Ring.ConfigurationManager on D-Bus
+└── FastAPI (:8080) — uses dasbus + gi (PyGObject) for D-Bus IPC
+```
 
-## Команды для проверки
+Key flow: Router → JamiDBusClient (singleton) → D-Bus proxy → jami-daemon.
+Events flow in reverse: D-Bus signal → Gio subscription → EventBus → WebSocket.
 
-- Lint: `ruff check .`
-- Typecheck: `mypy app/`
-- Tests: `pytest tests/`
-- Build: `docker-compose build`
-- Run: `docker-compose up`
+## Project Structure
+
+```
+app/
+├── main.py              # FastAPI app, startup/shutdown lifecycle, /health
+├── config.py            # pydantic-settings (env prefix: JAMI_API_)
+├── dbus_client.py       # Singleton D-Bus client, all daemon methods, signal handling
+├── routers/             # FastAPI routers (one per domain)
+│   ├── accounts.py      # CRUD /accounts
+│   ├── contacts.py      # /accounts/{id}/contacts
+│   ├── messages.py      # messaging + WebSocket endpoint
+│   ├── calls.py         # /accounts/{id}/calls
+│   └── files.py         # file transfer
+├── schemas/             # Pydantic request/response models
+├── services/
+│   ├── jami_service.py  # Thin business logic wrapper around dbus_client
+│   └── event_bus.py     # Thread-safe pub/sub (D-Bus → asyncio bridge)
+└── websocket/
+    └── handler.py       # WebSocket connection manager
+
+tests/
+├── conftest.py          # Mocks dasbus/gi modules, provides fixtures
+├── test_accounts.py     # Tests via JamiService
+├── test_contacts.py     # Tests via JamiDBusClient directly
+├── test_messages.py     # Tests via JamiDBusClient directly
+├── test_calls.py
+├── test_files.py
+└── test_event_bus.py
+```
+
+## Code Style
+
+### Formatting & Linting
+
+- **Ruff** with `target-version = "py312"`, `line-length = 100`
+- Enabled rules: `E` (pycodestyle), `F` (pyflakes), `I` (isort), `W` (pycodestyle warnings)
+- Run `ruff check .` before committing
+
+### Imports
+
+- stdlib → third-party → local (`app.*`), separated by blank lines (enforced by isort/I rule)
+- Use `from X import Y` style for specific names
+- Never use wildcard imports
+
+### Types
+
+- Use modern Python 3.10+ syntax: `dict[str, str]`, `list[str]`, `X | None` (not `Optional`)
+- All functions have return type annotations
+- `Any` is used sparingly, mainly for D-Bus proxy and gi types that lack stubs
+
+### Naming Conventions
+
+- Files: `snake_case.py`
+- Classes: `PascalCase` (e.g., `JamiDBusClient`, `AccountCreate`, `ConnectionManager`)
+- Functions/methods: `snake_case` (e.g., `send_text_message`, `get_account_list`)
+- Constants: module-level `SNAKE_CASE` (rare in this codebase)
+- Private attributes: `_prefix` (e.g., `_bus`, `_proxy`, `_connected`)
+- Pydantic models: noun phrases (`AccountCreate`, `MessageSend`, `CallInfo`)
+
+### Error Handling
+
+- Router errors: catch exceptions → raise `HTTPException(status_code=..., detail=str(e))`
+- 404 for get/list operations, 500 for mutations that fail
+- D-Bus client: `RuntimeError("D-Bus not connected")` if proxy used while disconnected
+- Logging via structlog: `logger.info("event_name", key=value)` style
+
+### Concurrency
+
+- `JamiDBusClient` is a thread-safe singleton (double-checked locking)
+- D-Bus event loop runs in a daemon thread (`_event_thread`)
+- `EventBus.publish_sync()` uses `threading.Lock` for safe cross-thread publishing
+- `EventBus.subscribe()` returns `asyncio.Queue` consumed by WebSocket handlers
+
+### Pydantic Schemas
+
+- One file per domain in `app/schemas/`
+- Models extend `BaseModel`
+- Default values for optional fields (e.g., `alias: str = ""`)
+- No `Config` class — use `model_config` dict when needed
+
+### Routers
+
+- One file per domain in `app/routers/`
+- Module-level `router = APIRouter()`
+- Registered in `main.py` with `app.include_router(router, prefix="/api", tags=[...])`
+- All endpoints are `async def` even when calling synchronous D-Bus methods
+- Return type annotations on all endpoints
+
+### Tests
+
+- `conftest.py` mocks `dasbus` and `gi` modules at import level via `sys.modules`
+- Two fixtures: `mock_dbus_client` (raw client with `_proxy = MagicMock`) and `mock_service` (JamiService wrapper)
+- Tests use `@pytest.mark.asyncio` on every test function
+- Test naming: `test_<verb>_<noun>` (e.g., `test_create_account`, `test_send_message`)
+- Tests call dbus_client methods directly or via JamiService, then assert on mock calls
+- `pytest.ini_options`: `asyncio_mode = "auto"`, `testpaths = ["tests"]`
+
+## Key D-Bus Signatures (discovered during development)
+
+| Method | Signature | Notes |
+|--------|-----------|-------|
+| `sendTextMessage` | `ssa{ss}i` | `(account, uri, {mime: body}, flag)` |
+| `sendMessage` (swarm) | `ssssi` | `(account, conv_id, text, parent_id, flag)` |
+| `sendFile` | `sssss` | `(account, conv_id, path, display_name, reply_to)`, void return |
+| `loadConversation` | `sssi` | Triggers async `swarmLoaded` + `messagesFound` signals |
+| `getLastMessages` | `st` | `(account, base_timestamp_uint64)` |
+| Signal `swarmMessageReceived` | tuple | `(account, conv, (msg_id, type, parent, {details}, ...))` |
+
+## Docker Notes
+
+- Base image: `debian:bookworm-slim`
+- jami-daemon installed from official Jami nightly APT repo
+- Python venv uses `--system-site-packages` for `gi` (PyGObject from system packages)
+- Venv at `/opt/venv`, activated via `PATH`
+- Entrypoint: `dbus-launch` → `/usr/libexec/jamid` (background) → `uvicorn`
+- Volume: `/root/.local/share/jami` for data persistence
+- Environment variables: `JAMI_API_HOST`, `JAMI_API_PORT`, `JAMI_API_LOG_LEVEL`

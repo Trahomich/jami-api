@@ -255,6 +255,15 @@ class JamiDBusClient:
     def get_conversations(self, account_id: str) -> list[str]:
         return self.proxy.getConversations(account_id)
 
+    def get_conversation_requests(self, account_id: str) -> list[str]:
+        return self.proxy.getConversationRequests(account_id)
+
+    def accept_conversation_request(self, account_id: str, conv_id: str) -> None:
+        self.proxy.acceptConversationRequest(account_id, conv_id)
+
+    def decline_conversation_request(self, account_id: str, conv_id: str) -> None:
+        self.proxy.declineConversationRequest(account_id, conv_id)
+
     def load_conversation(
         self, account_id: str, conv_id: str, from_msg: str = "", count: int = 50
     ) -> int:

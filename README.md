@@ -76,6 +76,29 @@ curl -X POST http://localhost:8080/api/accounts/{account_id}/conversations/{conv
 # → {"status":"sent"}
 ```
 
+## Приглашения в беседы
+
+Посмотреть входящие приглашения:
+
+```bash
+curl http://localhost:8080/api/accounts/{account_id}/conversation-requests
+# → ["7a1e768113e5d04a097836aabcac78c663a58094"]
+```
+
+Принять:
+
+```bash
+curl -X POST http://localhost:8080/api/accounts/{account_id}/conversation-requests/{conv_id}/accept
+# → {"status":"accepted"}
+```
+
+Отклонить:
+
+```bash
+curl -X POST http://localhost:8080/api/accounts/{account_id}/conversation-requests/{conv_id}/decline
+# → {"status":"declined"}
+```
+
 ## Отправка файла
 
 ```bash

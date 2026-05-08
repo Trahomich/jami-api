@@ -59,7 +59,7 @@ app/
 ├── routers/             # FastAPI routers (one per domain)
 │   ├── accounts.py      # CRUD /accounts
 │   ├── contacts.py      # /accounts/{id}/contacts
-│   ├── messages.py      # messaging + WebSocket endpoint
+│   ├── messages.py      # messaging + WebSocket endpoint + conversation requests
 │   ├── calls.py         # /accounts/{id}/calls
 │   ├── files.py         # file transfer
 │   └── alerts.py        # Prometheus AlertManager webhook

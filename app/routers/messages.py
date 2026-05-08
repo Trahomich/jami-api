@@ -47,6 +47,35 @@ async def list_conversations(account_id: str) -> list[str]:
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.get("/accounts/{account_id}/conversation-requests")
+async def list_conversation_requests(account_id: str) -> list[str]:
+    client = JamiDBusClient.get_instance()
+    try:
+        return client.get_conversation_requests(account_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/accounts/{account_id}/conversation-requests/{conv_id}/accept")
+async def accept_conversation_request(account_id: str, conv_id: str) -> dict[str, str]:
+    client = JamiDBusClient.get_instance()
+    try:
+        client.accept_conversation_request(account_id, conv_id)
+        return {"status": "accepted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/accounts/{account_id}/conversation-requests/{conv_id}/decline")
+async def decline_conversation_request(account_id: str, conv_id: str) -> dict[str, str]:
+    client = JamiDBusClient.get_instance()
+    try:
+        client.decline_conversation_request(account_id, conv_id)
+        return {"status": "declined"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/accounts/{account_id}/conversations/{conv_id}/messages")
 async def get_conversation_messages(account_id: str, conv_id: str, count: int = 50) -> dict:
     client = JamiDBusClient.get_instance()

@@ -54,7 +54,7 @@ async def receive_alert(notification: AlertNotification) -> AlertResult:
 
     conversation_id = notification.conversation_id or settings.alert_conversation_id
 
-    logger.info("alert_payload_received", payload=notification.model_dump())
+    logger.info("alert_resolved_ids", account_id=account_id, conversation_id=conversation_id)
 
     client = JamiDBusClient.get_instance()
 

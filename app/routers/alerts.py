@@ -53,6 +53,8 @@ async def receive_alert(notification: AlertNotification) -> AlertResult:
     if not recipients and settings.alert_recipients:
         recipients = settings.alert_recipients
 
+    conversation_id = notification.conversation_id or settings.alert_conversation_id
+
     client = JamiDBusClient.get_instance()
 
     message = _format_alert_message(notification)
@@ -61,24 +63,22 @@ async def receive_alert(notification: AlertNotification) -> AlertResult:
     failed = 0
     details: list[dict[str, str]] = []
 
-    if notification.conversation_id:
+    if conversation_id:
         try:
-            client.send_conversation_message(account_id, notification.conversation_id, message)
+            client.send_conversation_message(account_id, conversation_id, message)
             sent += 1
-            details.append({"conversation_id": notification.conversation_id, "status": "sent"})
-            logger.info("alert_sent_to_conversation", conversation_id=notification.conversation_id)
+            details.append({"conversation_id": conversation_id, "status": "sent"})
+            logger.info("alert_sent_to_conversation", conversation_id=conversation_id)
         except Exception as e:
             failed += 1
             details.append(
                 {
-                    "conversation_id": notification.conversation_id,
+                    "conversation_id": conversation_id,
                     "status": "failed",
                     "error": str(e),
                 }
             )
-            logger.error(
-                "alert_send_failed", conversation_id=notification.conversation_id, error=str(e)
-            )
+            logger.error("alert_send_failed", conversation_id=conversation_id, error=str(e))
     elif recipients:
         for recipient in recipients:
             try:

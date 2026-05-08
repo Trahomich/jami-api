@@ -101,6 +101,70 @@ curl http://localhost:8080/api/accounts/{account_id}/files/{conversation_id}/{in
 # → {"error_code":0,"path":"/tmp/file","total_size":1024,"bytes_progress":1024}
 ```
 
+## Prometheus AlertManager
+
+API принимает webhook от Prometheus AlertManager и пересылает алерты в Jami-чат.
+
+### Конфигурация
+
+Задайте переменные окружения (опционально — можно передавать в теле запроса):
+
+```yaml
+environment:
+  - JAMI_API_ALERT_ACCOUNT_ID=6b658ed9429e6b8d
+  - JAMI_API_ALERT_RECIPIENTS=["141b732d5c8e82f5e5ba36a9d1f023c866f0af34"]
+```
+
+### AlertManager config
+
+```yaml
+receivers:
+  - name: 'jami'
+    webhook_configs:
+      - url: 'http://jami-api:8080/api/alerts'
+        send_resolved: true
+route:
+  receiver: 'jami'
+```
+
+### Отправка в swarm-разговор
+
+```bash
+curl -X POST http://localhost:8080/api/alerts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "account_id": "6b658ed9429e6b8d",
+    "conversation_id": "28ae52ed5d4334a7f3cd8e0b588229d7523e9bd0",
+    "webhook": {
+      "receiver": "jami",
+      "status": "firing",
+      "alerts": [{
+        "status": "firing",
+        "labels": {"alertname": "HighCpu", "severity": "critical"},
+        "annotations": {"summary": "CPU > 90%"},
+        "starts_at": "2026-01-01T00:00:00Z"
+      }],
+      "external_url": "http://alertmanager:9093"
+    }
+  }'
+# → {"status":"ok","sent":1,"failed":0,"details":[{"conversation_id":"28ae52ed...","status":"sent"}]}
+```
+
+### Отправка напрямую контактам
+
+```bash
+curl -X POST http://localhost:8080/api/alerts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "account_id": "6b658ed9429e6b8d",
+    "recipients": ["141b732d5c8e82f5e5ba36a9d1f023c866f0af34"],
+    "webhook": {
+      "status": "firing",
+      "alerts": [{"status": "firing", "labels": {"alertname": "DiskFull"}, "annotations": {"summary": "Disk > 95%"}}]
+    }
+  }'
+```
+
 ## MCP Server
 
 API включает MCP сервер (Streamable HTTP transport) на `POST /mcp` для интеграции с AI-агентами (Claude, Cursor, и т.д.).
@@ -172,5 +236,6 @@ API включает MCP сервер (Streamable HTTP transport) на `POST /mc
 | POST | `/api/accounts/{id}/calls/{call_id}/hangup` | Завершить звонок |
 | GET | `/api/accounts/{id}/calls` | Активные звонки |
 | WS | `/api/ws/accounts/{id}/events` | Real-time события |
+| POST | `/api/alerts` | AlertManager webhook → Jami |
 | POST | `/mcp` | MCP сервер (Streamable HTTP) |
 | GET | `/health` | Healthcheck |

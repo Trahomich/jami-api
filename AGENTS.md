@@ -61,7 +61,8 @@ app/
 │   ├── contacts.py      # /accounts/{id}/contacts
 │   ├── messages.py      # messaging + WebSocket endpoint
 │   ├── calls.py         # /accounts/{id}/calls
-│   └── files.py         # file transfer
+│   ├── files.py         # file transfer
+│   └── alerts.py        # Prometheus AlertManager webhook
 ├── schemas/             # Pydantic request/response models
 ├── services/
 │   ├── jami_service.py  # Thin business logic wrapper around dbus_client
@@ -76,6 +77,7 @@ tests/
 ├── test_messages.py     # Tests via JamiDBusClient directly
 ├── test_calls.py
 ├── test_files.py
+├── test_alerts.py       # Tests for AlertManager webhook
 ├── test_event_bus.py
 └── test_api_integration.py  # HTTP tests against running service
 ```
@@ -167,3 +169,12 @@ tests/
 - Entrypoint: `dbus-launch` → `/usr/libexec/jamid` (background) → `uvicorn`
 - Volume: `/root/.local/share/jami` for data persistence
 - Environment variables: `JAMI_API_HOST`, `JAMI_API_PORT`, `JAMI_API_LOG_LEVEL`
+
+## Prometheus AlertManager Integration
+
+- `POST /api/alerts` accepts standard AlertManager webhook payload (v4 format)
+- Routes alerts to Jami conversations (swarm) or direct messages to contacts
+- Configurable via env: `JAMI_API_ALERT_ACCOUNT_ID` (default account), `JAMI_API_ALERT_RECIPIENTS` (JSON array of default recipient URIs)
+- Request body overrides config: `account_id`, `conversation_id`, `recipients` fields
+- Formats alerts as readable text with status emoji, labels, annotations, timestamps
+- Returns `AlertResult` with `status` (ok/partial/error), `sent`/`failed` counts, per-recipient details

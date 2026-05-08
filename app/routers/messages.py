@@ -48,7 +48,7 @@ async def list_conversations(account_id: str) -> list[str]:
 
 
 @router.get("/accounts/{account_id}/conversation-requests")
-async def list_conversation_requests(account_id: str) -> list[str]:
+async def list_conversation_requests(account_id: str) -> list[dict]:
     client = JamiDBusClient.get_instance()
     try:
         return client.get_conversation_requests(account_id)

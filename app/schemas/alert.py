@@ -25,11 +25,10 @@ class AlertManagerWebhook(BaseModel):
     group_key: str = ""
 
 
-class AlertNotification(BaseModel):
+class AlertNotification(AlertManagerWebhook):
     account_id: str | None = None
     conversation_id: str | None = None
     recipients: list[str] | None = None
-    webhook: AlertManagerWebhook
 
 
 class AlertResult(BaseModel):

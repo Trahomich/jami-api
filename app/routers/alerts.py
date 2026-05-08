@@ -11,15 +11,14 @@ settings = Settings()
 
 
 def _format_alert_message(notification: AlertNotification) -> str:
-    webhook = notification.webhook
     lines: list[str] = []
 
-    status_emoji = "\u26a0\ufe0f" if webhook.status == "firing" else "\u2705"
-    lines.append(f"{status_emoji} AlertManager: {webhook.status.upper()}")
-    lines.append(f"Receiver: {webhook.receiver}")
+    status_emoji = "\u26a0\ufe0f" if notification.status == "firing" else "\u2705"
+    lines.append(f"{status_emoji} AlertManager: {notification.status.upper()}")
+    lines.append(f"Receiver: {notification.receiver}")
     lines.append("")
 
-    for i, alert in enumerate(webhook.alerts, 1):
+    for i, alert in enumerate(notification.alerts, 1):
         alert_icon = "\U0001f534" if alert.status == "firing" else "\U0001f7e2"
         lines.append(f"{alert_icon} Alert #{i} [{alert.status.upper()}]")
 
@@ -37,8 +36,8 @@ def _format_alert_message(notification: AlertNotification) -> str:
 
         lines.append("")
 
-    if webhook.external_url:
-        lines.append(f"External URL: {webhook.external_url}")
+    if notification.external_url:
+        lines.append(f"External URL: {notification.external_url}")
 
     return "\n".join(lines)
 

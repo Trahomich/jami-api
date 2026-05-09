@@ -44,7 +44,7 @@ def _format_alert_message(notification: AlertNotification) -> str:
 
 @router.post("/alerts", response_model=AlertResult)
 async def receive_alert(notification: AlertNotification) -> AlertResult:
-    account_id = notification.account_id or settings.alert_account_id
+    account_id = (notification.account_id or settings.alert_account_id or "").strip()
     if not account_id:
         raise HTTPException(status_code=400, detail="account_id is required")
 
@@ -52,7 +52,7 @@ async def receive_alert(notification: AlertNotification) -> AlertResult:
     if not recipients and settings.alert_recipients:
         recipients = settings.alert_recipients
 
-    conversation_id = notification.conversation_id or settings.alert_conversation_id
+    conversation_id = (notification.conversation_id or settings.alert_conversation_id or "").strip()
 
     logger.info("alert_resolved_ids", account_id=account_id, conversation_id=conversation_id)
 

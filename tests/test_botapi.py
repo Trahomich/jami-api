@@ -65,12 +65,13 @@ def _swarm_event(body: str = "Привет!", author: str = PEER, msg_id: str = 
     }
 
 
-def _direct_event(body: str = "direct hi") -> dict:
+def _direct_event(body: str = "direct hi", msg_id: str = "") -> dict:
     return {
         "type": "message",
         "source": "direct",
         "account_id": ACCOUNT,
         "from": PEER,
+        "message_id": msg_id,
         "payloads": {"text/plain": body},
     }
 
@@ -208,7 +209,7 @@ async def test_swarm_event_becomes_update(service, store):
 
 @pytest.mark.asyncio
 async def test_direct_event_becomes_private_update(service, store):
-    await service.handle_event(ACCOUNT, _direct_event())
+    await service.handle_event(ACCOUNT, _direct_event(msg_id="d-42"))
 
     updates = store.get_updates(ACCOUNT)
     assert len(updates) == 1
@@ -219,10 +220,45 @@ async def test_direct_event_becomes_private_update(service, store):
 
 
 @pytest.mark.asyncio
+async def test_direct_event_dedup_by_message_id(service, store):
+    await service.handle_event(ACCOUNT, _direct_event(msg_id="d-42"))
+    await service.handle_event(ACCOUNT, _direct_event(msg_id="d-42"))
+    assert len(store.get_updates(ACCOUNT)) == 1
+
+
+@pytest.mark.asyncio
+async def test_direct_event_empty_payload_skipped(service, store):
+    await service.handle_event(ACCOUNT, _direct_event(body="", msg_id="d-43"))
+    await service.handle_event(
+        ACCOUNT, {"type": "message", "source": "direct", "from": PEER, "payloads": {}}
+    )
+    assert store.get_updates(ACCOUNT) == []
+
+
+@pytest.mark.asyncio
 async def test_self_echo_filtered(service, store):
     store.create_token(ACCOUNT, bot_uri=PEER)
     await service.handle_event(ACCOUNT, _swarm_event(author=PEER))
     assert store.get_updates(ACCOUNT) == []
+
+
+@pytest.mark.asyncio
+async def test_self_echo_lazy_uri_backfill(service, store, mock_dbus_client):
+    """Token created before DHT registration: URI resolved lazily on first event."""
+    store.create_token(ACCOUNT, bot_uri="")  # empty at creation
+    mock_dbus_client.proxy.getAccountDetails.return_value = {
+        "Account.username": PEER  # daemon keeps fingerprint in static username
+    }
+    mock_dbus_client.proxy.getVolatileAccountDetails.return_value = {}
+
+    # First event is our own echo → filtered, and URI gets backfilled.
+    await service.handle_event(ACCOUNT, _swarm_event(author=PEER))
+    assert store.get_updates(ACCOUNT) == []
+    assert store.list_tokens()[0]["bot_uri"] == PEER
+
+    # A message from someone else now passes through.
+    await service.handle_event(ACCOUNT, _swarm_event(author="other0001"))
+    assert len(store.get_updates(ACCOUNT)) == 1
 
 
 @pytest.mark.asyncio
@@ -274,6 +310,15 @@ async def test_non_message_events_ignored(service, store):
     assert store.get_updates(ACCOUNT) == []
 
 
+@pytest.mark.asyncio
+async def test_swarm_merge_commit_ignored(service, store):
+    event = _swarm_event(msg_id="merge-1")
+    event["message"]["type"] = "merge"
+    event["message"]["body"] = ""
+    await service.handle_event(ACCOUNT, event)
+    assert store.get_updates(ACCOUNT) == []
+
+
 # ---------------------------------------------------------------- webhooks
 
 
@@ -306,6 +351,7 @@ async def test_webhook_dispatch_success(service, store, monkeypatch):
     assert request["url"] == "https://example.com/hook"
     assert request["headers"]["X-Telegram-Bot-Api-Secret-Token"] == "s3cret"
     assert request["json"]["message"]["text"] == "Привет!"
+    assert request["json"]["update_id"] > 0
 
     # delivered update is removed from the polling queue
     assert store.get_updates(ACCOUNT) == []

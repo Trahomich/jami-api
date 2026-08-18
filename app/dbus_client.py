@@ -134,12 +134,18 @@ class JamiDBusClient:
         )
 
     def _handle_incoming_message(self, val: tuple) -> None:
-        account_id, from_uri, payloads = val[0], val[1], val[2]
+        # Daemon >= 16: (account, from, message_id, payloads)
+        # Older daemons: (account, from, payloads)
+        if len(val) >= 4:
+            account_id, from_uri, msg_id, payloads = val[0], val[1], str(val[2]), val[3]
+        else:
+            account_id, from_uri, msg_id, payloads = val[0], val[1], "", val[2]
         event = {
             "type": "message",
             "source": "direct",
             "account_id": account_id,
             "from": from_uri,
+            "message_id": msg_id,
             "payloads": {k: v for k, v in payloads.items()}
             if isinstance(payloads, dict)
             else str(payloads),

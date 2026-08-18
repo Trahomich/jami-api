@@ -139,6 +139,15 @@ class BotStore:
             cur = self._conn.execute("DELETE FROM tokens WHERE token = ?", (token,))
         return cur.rowcount > 0
 
+    def update_bot_uri(self, account_id: str, bot_uri: str) -> None:
+        if not bot_uri:
+            return
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE tokens SET bot_uri = ? WHERE account_id = ? AND bot_uri = ''",
+                (bot_uri, account_id),
+            )
+
     def accounts_with_tokens(self) -> list[str]:
         with self._lock:
             rows = self._conn.execute("SELECT DISTINCT account_id FROM tokens").fetchall()

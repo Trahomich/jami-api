@@ -99,6 +99,7 @@ class BotAPIService:
             return
 
         update_id = self._store.insert_update(bot_account, update)
+        update["update_id"] = update_id
         logger.info(
             "botapi_update_stored",
             bot_account=bot_account,
@@ -118,10 +119,24 @@ class BotAPIService:
         body = str(msg.get("body", ""))
         msg_type = str(msg.get("type", "text/plain"))
 
+        # Only user content is a message: skip merge/vote/member commits.
+        is_file = msg_type.startswith("application/data-transfer")
+        is_text = msg_type.startswith("text/")
+        if not is_file and not is_text:
+            return None
+
         # Skip our own echoes (also deduplicated by jami_msg_id in the store).
-        token_uris = [
+        token_uris = {
             t["bot_uri"] for t in self._store.list_tokens() if t["account_id"] == bot_account
-        ]
+        }
+        token_uris.discard("")
+        if not token_uris:
+            # URI unknown yet (e.g. token created before DHT registration):
+            # resolve lazily and backfill all tokens of this account.
+            uri = self.get_bot_uri(bot_account)
+            if uri:
+                self._store.update_bot_uri(bot_account, uri)
+                token_uris.add(uri)
         if author and author in token_uris:
             return None
 
@@ -158,7 +173,6 @@ class BotAPIService:
             }
         else:
             message["text"] = body
-
         return {"update_id": 0, "message": message}
 
     def _direct_to_update(self, bot_account: str, event: dict[str, Any]) -> dict[str, Any] | None:
@@ -169,16 +183,20 @@ class BotAPIService:
         body = ""
         if isinstance(payloads, dict):
             body = str(payloads.get("text/plain", next(iter(payloads.values()), "")))
+        if not body:
+            return None
 
         chat = self._store.get_or_create_chat(
             bot_account, "private", from_uri, peer_uri=from_uri
         )
         user = self._store.get_or_create_user(bot_account, from_uri)
 
-        # Direct events carry no daemon message id: no cross-restart dedup.
+        # Daemon >= 16 supplies a message id; older ones don't (no dedup then).
         message_id = self._store.insert_message(
-            bot_account, chat["chat_id"], "", from_uri, body, ""
+            bot_account, chat["chat_id"], str(event.get("message_id", "")), from_uri, body, ""
         )
+        if message_id is None:
+            return None
         message = {
             "message_id": message_id,
             "from": self._user_obj(user),
@@ -253,9 +271,25 @@ class BotAPIService:
     # ------------------------------------------------------------- actions
 
     def get_bot_uri(self, bot_account: str) -> str:
+        """Resolve the account's Jami URI hash.
+
+        Prefers the volatile ``Account.uri``; for RING accounts without a
+        registered username the daemon keeps the fingerprint in the static
+        ``Account.username`` field, which is what swarm message authors use.
+        """
+        def _clean(value: Any) -> str:
+            return value if isinstance(value, str) else ""
+
         try:
             volatile = self._client().get_volatile_account_details(bot_account)
-            return volatile.get("Account.uri", "")
+            uri = _clean(volatile.get("Account.uri", ""))
+            if uri:
+                return uri
+        except Exception:
+            pass
+        try:
+            details = self._client().get_account_details(bot_account)
+            return _clean(details.get("Account.username", ""))
         except Exception:
             return ""
 
@@ -335,11 +369,13 @@ class BotAPIService:
         size = path.stat().st_size if path.exists() else 0
 
         client = self._client()
-        jami_msg_id = client.send_file(bot_account, chat["conv_id"], str(path))
+        result = client.send_file(bot_account, chat["conv_id"], str(path))
+        # Daemon's sendFile returns the interaction id; older builds return void.
+        jami_msg_id = str(result) if result else ""
 
         self._store.insert_file(file_id, bot_account, str(path), file_name, size)
         message_id = self._store.insert_message(
-            bot_account, chat_id, str(jami_msg_id), "", caption or file_name, file_id
+            bot_account, chat_id, jami_msg_id, "", caption or file_name, file_id
         )
         message: dict[str, Any] = {
             "message_id": message_id or 0,

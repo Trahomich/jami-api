@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException
 
-from app.dbus_client import JamiDBusClient
 from app.schemas.account import AccountCreate, AccountInfo, AccountRegister
 from app.services.jami_service import JamiService
 

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import app.routers.messages as messages_mod
 from app.config import Settings
 from app.dbus_client import JamiDBusClient
-from app.routers import accounts, alerts, botapi, calls, contacts, files, messages
+from app.routers import accounts, admin_ui, alerts, botapi, calls, contacts, files, messages
 from app.services.event_bus import EventBus
 
 settings = Settings()
@@ -58,6 +58,7 @@ app.include_router(calls.router, prefix="/api", tags=["calls"])
 app.include_router(files.router, prefix="/api", tags=["files"])
 app.include_router(alerts.router, prefix="/api", tags=["alerts"])
 app.include_router(botapi.router, tags=["botapi"])
+app.include_router(admin_ui.router, tags=["admin"])
 
 
 @app.get("/health")

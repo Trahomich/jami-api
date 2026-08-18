@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jami API — Боты</title>
+<style>
+  :root { --bg:#101418; --card:#1a2027; --line:#2a323c; --text:#e6edf3;
+          --dim:#8b98a5; --accent:#4f8cff; --danger:#ff5f5f; --ok:#3fbf6f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,sans-serif; background:var(--bg);
+         color:var(--text); padding:32px 16px; }
+  .wrap { max-width:880px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--dim); margin-bottom:24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+          padding:16px; margin-bottom:16px; }
+  form.create { display:flex; gap:8px; flex-wrap:wrap; }
+  input, select { background:#0d1117; color:var(--text); border:1px solid var(--line);
+                   border-radius:6px; padding:8px 10px; font-size:14px; }
+  input[name=name] { flex:1; min-width:160px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px;
+           padding:8px 14px; font-size:14px; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  .danger { background:transparent; color:var(--danger);
+            border:1px solid var(--danger); padding:4px 10px; font-size:13px; }
+  .danger:hover { background:var(--danger); color:#fff; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--dim); font-weight:500; padding:6px 8px;
+       border-bottom:1px solid var(--line); }
+  td { padding:8px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tr:last-child td { border-bottom:0; }
+  code { background:#0d1117; padding:2px 6px; border-radius:4px; font-size:12px;
+         color:#9ecbff; word-break:break-all; }
+  .muted { color:var(--dim); }
+  .empty { color:var(--dim); text-align:center; padding:24px 0; }
+  .toast { position:fixed; bottom:20px; right:20px; background:var(--ok);
+           color:#fff; padding:10px 16px; border-radius:8px; display:none;
+           font-size:13px; max-width:420px; word-break:break-all; }
+  .toast.err { background:var(--danger); }
+  .new-token { margin-top:10px; padding:10px; border:1px dashed var(--accent);
+               border-radius:8px; display:none; }
+  .new-token code { user-select:all; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Jami Bot API — управление токенами</h1>
+  <div class="sub">Боты работают через <code>/bot&lt;token&gt;/метод</code> — совместимо с библиотеками Telegram.</div>
+
+  <div class="card">
+    <form class="create" id="create">
+      <select id="account" required><option value="">— аккаунт —</option></select>
+      <input id="name" name="name" placeholder="Имя бота (необязательно)">
+      <button type="submit">Создать бота</button>
+    </form>
+    <div class="new-token" id="newtoken">
+      Токен создан — скопируйте, он показывается один раз:
+      <code id="newtoken-value"></code>
+    </div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Токен</th><th>Имя</th><th>Аккаунт</th><th>Jami ID</th><th>Создан</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="6" class="empty">Загрузка…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmtDate = (ts) => ts ? new Date(ts * 1000).toLocaleString('ru-RU') : '';
+
+function toast(msg, err=false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = err ? 'toast err' : 'toast';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', err ? 6000 : 3000);
+}
+
+async function loadAccounts() {
+  try {
+    const res = await fetch('/api/accounts');
+    const accounts = await res.json();
+    const sel = $('account');
+    for (const id of accounts) {
+      const opt = document.createElement('option');
+      opt.value = id; opt.textContent = id;
+      sel.appendChild(opt);
+    }
+  } catch (e) { toast('Не удалось загрузить аккаунты: ' + e, true); }
+}
+
+async function loadBots() {
+  try {
+    const res = await fetch('/api/bots');
+    if (!res.ok) throw new Error(await res.text());
+    const bots = await res.json();
+    const tb = $('rows');
+    tb.innerHTML = '';
+    if (!bots.length) {
+      tb.innerHTML = '<tr><td colspan="6" class="empty">Ботов пока нет — создайте первый выше</td></tr>';
+      return;
+    }
+    for (const b of bots) {
+      const tr = document.createElement('tr');
+      const btn = document.createElement('button');
+      btn.className = 'danger';
+      btn.textContent = 'Отозвать';
+      btn.onclick = async () => {
+        if (!confirm(`Отозвать токен ${b.name || b.token.slice(0, 12) + '…'}?`)) return;
+        try {
+          const r = await fetch('/api/bots/' + encodeURIComponent(b.token), {method:'DELETE'});
+          if (!r.ok) throw new Error(await r.text());
+          toast('Токен отозван');
+          loadBots();
+        } catch (e) { toast('Ошибка: ' + e, true); }
+      };
+      tr.innerHTML = `
+        <td><code>${b.token}</code></td>
+        <td>${escapeHtml(b.name || '—')}</td>
+        <td><code>${b.account_id}</code></td>
+        <td><span class="muted">${b.bot_uri ? escapeHtml(b.bot_uri.slice(0, 16) + '…') : '—'}</span></td>
+        <td class="muted">${fmtDate(b.created_at)}</td>`;
+      const td = document.createElement('td');
+      td.appendChild(btn);
+      tr.appendChild(td);
+      tb.appendChild(tr);
+    }
+  } catch (e) {
+    $('rows').innerHTML = '<tr><td colspan="6" class="empty">Ошибка загрузки</td></tr>';
+    toast('Ошибка: ' + e, true);
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+$('create').onsubmit = async (e) => {
+  e.preventDefault();
+  const account_id = $('account').value;
+  const name = $('name').value.trim();
+  if (!account_id) { toast('Выберите аккаунт', true); return; }
+  try {
+    const res = await fetch('/api/bots', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({account_id, name})
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.description || JSON.stringify(body));
+    $('newtoken-value').textContent = body.token;
+    $('newtoken').style.display = 'block';
+    $('name').value = '';
+    toast('Бот создан');
+    loadBots();
+  } catch (e2) { toast('Ошибка: ' + e2, true); }
+};
+
+loadAccounts();
+loadBots();
+</script>
+</body>
+</html>

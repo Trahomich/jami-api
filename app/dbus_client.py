@@ -5,11 +5,10 @@ import gi
 
 gi.require_version("Gio", "2.0")
 gi.require_version("GLib", "2.0")
-from gi.repository import Gio, GLib
-
 import structlog
 from dasbus.connection import SessionMessageBus
 from dasbus.loop import EventLoop
+from gi.repository import Gio
 
 from app.services.event_bus import EventBus
 
@@ -135,12 +134,18 @@ class JamiDBusClient:
         )
 
     def _handle_incoming_message(self, val: tuple) -> None:
-        account_id, from_uri, payloads = val[0], val[1], val[2]
+        # Daemon >= 16: (account, from, message_id, payloads)
+        # Older daemons: (account, from, payloads)
+        if len(val) >= 4:
+            account_id, from_uri, msg_id, payloads = val[0], val[1], str(val[2]), val[3]
+        else:
+            account_id, from_uri, msg_id, payloads = val[0], val[1], "", val[2]
         event = {
             "type": "message",
             "source": "direct",
             "account_id": account_id,
             "from": from_uri,
+            "message_id": msg_id,
             "payloads": {k: v for k, v in payloads.items()}
             if isinstance(payloads, dict)
             else str(payloads),
@@ -249,8 +254,8 @@ class JamiDBusClient:
 
     def send_conversation_message(
         self, account_id: str, conv_id: str, body: str, parent: str = ""
-    ) -> None:
-        self.proxy.sendMessage(account_id, conv_id, body, parent, 0)
+    ) -> str:
+        return str(self.proxy.sendMessage(account_id, conv_id, body, parent, 0))
 
     def get_conversations(self, account_id: str) -> list[str]:
         return self.proxy.getConversations(account_id)

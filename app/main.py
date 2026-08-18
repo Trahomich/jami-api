@@ -4,10 +4,10 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import app.routers.messages as messages_mod
 from app.config import Settings
 from app.dbus_client import JamiDBusClient
-from app.routers import accounts, alerts, calls, contacts, files, messages
-import app.routers.messages as messages_mod
+from app.routers import accounts, alerts, botapi, calls, contacts, files, messages
 from app.services.event_bus import EventBus
 
 settings = Settings()
@@ -24,10 +24,15 @@ async def lifespan(app: FastAPI):
     logger.info("starting_jami_api", host=settings.host, port=settings.port)
     dbus_client.connect(event_bus=event_bus)
     messages_mod.set_event_bus(event_bus)
+    botapi.init_botapi(event_bus)
     async with mcp.session_manager.run():
+        if botapi.service is not None:
+            await botapi.service.start()
         logger.info("jami_api_ready")
         yield
     logger.info("shutting_down")
+    if botapi.service is not None:
+        await botapi.service.stop()
     dbus_client.disconnect()
 
 
@@ -52,6 +57,7 @@ app.include_router(messages.router, prefix="/api", tags=["messages"])
 app.include_router(calls.router, prefix="/api", tags=["calls"])
 app.include_router(files.router, prefix="/api", tags=["files"])
 app.include_router(alerts.router, prefix="/api", tags=["alerts"])
+app.include_router(botapi.router, tags=["botapi"])
 
 
 @app.get("/health")

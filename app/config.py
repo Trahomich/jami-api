@@ -9,5 +9,7 @@ class Settings(BaseSettings):
     alert_account_id: str = ""
     alert_conversation_id: str = ""
     alert_recipients: list[str] = []
+    db_path: str = "data/botapi.db"
+    files_dir: str = "data/botapi-files"
 
     model_config = {"env_prefix": "JAMI_API_"}

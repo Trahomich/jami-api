@@ -9,6 +9,8 @@ services:
       - JAMI_API_HOST=0.0.0.0
       - JAMI_API_PORT=8080
       - JAMI_API_LOG_LEVEL=info
+      - JAMI_API_DB_PATH=/root/.local/share/jami/botapi.db
+      - JAMI_API_FILES_DIR=/root/.local/share/jami/botapi-files
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

@@ -1,7 +1,7 @@
 import os
 
-import pytest
 import httpx
+import pytest
 
 BASE_URL = os.getenv("JAMI_API_URL", "http://192.168.99.10:8080")
 ACCOUNT_ID = os.getenv("JAMI_ACCOUNT_ID", "6b658ed9429e6b8d")

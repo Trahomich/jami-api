@@ -262,3 +262,68 @@ API включает MCP сервер (Streamable HTTP transport) на `POST /mc
 | POST | `/api/alerts` | AlertManager webhook → Jami |
 | POST | `/mcp` | MCP сервер (Streamable HTTP) |
 | GET | `/health` | Healthcheck |
+
+## Telegram Bot API-совместимый слой (экспериментально)
+
+На базе этого API реализован фасад, совместимый с Telegram Bot API: боты, написанные
+под Telegram (aiogram, telebot, python-telegram-bot и т.п.), могут работать, указав
+наш сервер как base URL.
+
+Поддерживаемые методы: `getMe`, `sendMessage` (с `reply_to_message_id`),
+`getUpdates` (long polling с offset), `setWebhook`/`deleteWebhook`/`getWebhookInfo`,
+`getChat`, `sendChatAction`, `sendDocument`, `sendPhoto`, `getFile` + скачивание файлов.
+
+### Создание бота
+
+```bash
+# 1. Создай Jami-аккаунт (см. выше) и получи его id
+# 2. Выпускаем токен бота для аккаунта
+curl -X POST http://localhost:8080/api/bots \
+  -H 'Content-Type: application/json' \
+  -d '{"account_id":"6b658ed9429e6b8d","name":"MyBot"}'
+# → {"token":"287868514:f27f4fd2063bcf9872f47dce3b6dc23d","account_id":"...", ...}
+```
+
+Пользователь добавляет аккаунт бота в контакты (или приглашает в swarm-беседу) —
+чат появляется у бота автоматически при первом входящем сообщении.
+
+### Приём апдейтов (long polling)
+
+```bash
+curl -X POST 'http://localhost:8080/bot<token>/getUpdates?timeout=25'
+# → {"ok":true,"result":[{"update_id":1,"message":{"message_id":1,
+#     "from":{"id":123,"is_bot":false,"first_name":"141b732d"},
+#     "chat":{"id":-456,"type":"group","title":"28ae52ed"},
+#     "date":1777105547,"text":"Привет!"}}]}
+```
+
+Или webhook (формат запроса идентичен Telegram, включая заголовок
+`X-Telegram-Bot-Api-Secret-Token`):
+
+```bash
+curl -X POST http://localhost:8080/bot<token>/setWebhook \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://bot.example.com/hook","secret_token":"s3cret"}'
+```
+
+### Отправка сообщений
+
+```bash
+curl -X POST http://localhost:8080/bot<token>/sendMessage \
+  -H 'Content-Type: application/json' \
+  -d '{"chat_id":-456,"text":"Ответ","reply_to_message_id":1}'
+# → {"ok":true,"result":{"message_id":2,"chat":{...},"date":...,"text":"Ответ"}}
+```
+
+Файлы отправляются как в Telegram (multipart) и скачиваются по
+`GET /bot<token>/files/<file_id>/<имя_файла>`.
+
+### Ограничения фазы 1
+
+- Нет inline-клавиатур/callback-кнопок, стикеров, платежей (нет в протоколе Jami).
+- Отправка файлов — только в swarm-беседы (не в direct-чаты по URI).
+- `parse_mode` игнорируется (разметка не поддерживается).
+- Не реализованы editMessageText/deleteMessage/reactions (фаза 2).
+- Сообщения самого бота не приходят как апдейты (как и в Telegram).
+- Хранилище (SQLite) и каталог файлов: `JAMI_API_DB_PATH`, `JAMI_API_FILES_DIR`
+  (в docker-compose размещены на персистентном volume).

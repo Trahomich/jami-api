@@ -5,11 +5,10 @@ import gi
 
 gi.require_version("Gio", "2.0")
 gi.require_version("GLib", "2.0")
-from gi.repository import Gio, GLib
-
 import structlog
 from dasbus.connection import SessionMessageBus
 from dasbus.loop import EventLoop
+from gi.repository import Gio
 
 from app.services.event_bus import EventBus
 
@@ -249,8 +248,8 @@ class JamiDBusClient:
 
     def send_conversation_message(
         self, account_id: str, conv_id: str, body: str, parent: str = ""
-    ) -> None:
-        self.proxy.sendMessage(account_id, conv_id, body, parent, 0)
+    ) -> str:
+        return str(self.proxy.sendMessage(account_id, conv_id, body, parent, 0))
 
     def get_conversations(self, account_id: str) -> list[str]:
         return self.proxy.getConversations(account_id)
